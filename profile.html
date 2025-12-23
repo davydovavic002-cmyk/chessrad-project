@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мой профиль</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="/js/auth-guard.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Личный кабинет</h1>
+
+        <!-- Этот блок будет заполняться данными пользователя -->
+        <div id="profile-info">
+            <p>Загрузка данных...</p>
+        </div>
+
+        <!-- Новый блок для выбора уровня -->
+        <div class="skill-level-section" style="margin-top: 20px; margin-bottom: 20px;">
+            <h3>Уровень мастерства</h3>
+            <select id="skill-level-select">
+                <option value="beginner">Новичок</option>
+                <option value="intermediate">Средний</option>
+                <option value="advanced">Продвинутый</option>
+            </select>
+            <button id="save-skill-btn" class="button" style="margin-left: 10px;">Сохранить</button>
+            <span id="skill-save-status" style="margin-left: 15px; color: green;"></span>
+        </div>
+
+        <!-- Ваши существующие кнопки навигации -->
+        <a href="/lobby.html" class="button">Вернуться в лобби</a>
+        <a href="#" id="logout-link-profile" class="button" style="background-color: #d9534f; margin-top: 10px;">Выйти из аккаунта</a>
+    </div>
+
+    <script src="/js/profile.js"></script>
+</body>
+</html>
