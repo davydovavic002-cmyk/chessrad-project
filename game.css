@@ -1,0 +1,169 @@
+/* public/css/style.css */
+
+/* --- Глобальные стили и переменные --- */
+:root {
+    --dark-bg: #2c2f33;
+    --dark-panel: #23272a;
+    --accent-blue: #5865F2;
+    --accent-blue-hover: #4752c4;
+    --accent-red: #da373c;
+    --accent-red-hover: #a62a2e;
+    --text-color: #dcddde;
+    --header-color: #ffffff;
+    --border-color: #4f545c;
+}
+
+body {
+    background-color: var(--dark-bg);
+    color: var(--text-color);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    box-sizing: border-box;
+}
+
+/* --- Основная разметка --- */
+/* Используем ваш класс .container для главной Flex-разметки */
+.container {
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+}
+
+/* Стили для левой части с доской (ваш класс .game-area) */
+.game-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+/* Стили для доски (используем ваш ID #myBoard) */
+#myBoard {
+    width: 60vh;
+    max-width: 600px;
+    height: 60vh;
+    max-height: 600px;
+}
+
+/* Стили для индикатора хода (используем ваш ID #turn-info) */
+#turn-info {
+    color: var(--header-color);
+    font-size: 1.5em;
+    font-weight: bold;
+    min-height: 30px;
+    text-align: center;
+}
+
+/* --- Стили для правой панели (ваш класс .info-panel) --- */
+.info-panel {
+    background-color: var(--dark-panel);
+    border-radius: 8px;
+    padding: 20px;
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.info-panel h3 {
+    color: var(--header-color);
+    margin: 0 0 10px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 1.2em;
+    text-align: center;
+}
+
+#status {
+    background-color: var(--dark-bg);
+    padding: 15px;
+    border-radius: 5px;
+    text-align: center;
+    font-size: 1.1em;
+    line-height: 1.4;
+    min-height: 40px;
+    margin: 0;
+}
+
+/* --- Стили для кнопок и ссылок --- */
+.controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+button, .button-link {
+    background-color: var(--accent-blue);
+    color: white;
+    border: none;
+    padding: 12px;
+    border-radius: 5px;
+    font-size: 1em;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    font-weight: bold;
+    text-align: center;
+    text-decoration: none;
+    display: block;
+}
+
+button:hover, .button-link:hover {
+    background-color: var(--accent-blue-hover);
+}
+
+/* Специальный стиль для кнопки "Сдаться" (ваш ID #resign-btn) */
+#resign-btn {
+    background-color: var(--accent-red);
+}
+#resign-btn:hover {
+    background-color: var(--accent-red-hover);
+}
+
+/* --- Отладочная информация --- */
+.debug-box {
+    margin-top: 10px;
+}
+.debug-box p {
+    margin: 5px 0;
+}
+.debug-box code, .debug-box pre {
+    background-color: var(--dark-bg);
+    padding: 10px;
+    border-radius: 5px;
+    font-family: 'Courier New', Courier, monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #a0a0a0;
+    font-size: 0.9em;
+    display: block;
+}
+
+/* --- Адаптивность для мобильных устройств --- */
+@media (max-width: 950px) {
+    body {
+        align-items: flex-start;
+    }
+
+    .container {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .info-panel {
+        width: 90vw;
+        max-width: 600px;
+    }
+
+    #myBoard {
+        width: 90vw;
+        height: 90vw;
+    }
+}
