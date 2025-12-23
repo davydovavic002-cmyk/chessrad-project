@@ -1,0 +1,33 @@
+{
+  "name": "chess-app",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A simple online chess game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "chess",
+    "socket.io",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
+    "chess.js": "^1.4.0",
+    "connect-sqlite3": "^0.9.16",
+    "express": "^4.19.2",
+    "express-session": "^1.18.2",
+    "socket.io": "4.7.5",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}
