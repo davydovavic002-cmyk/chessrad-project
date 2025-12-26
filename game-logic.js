@@ -1,73 +1,64 @@
-// ==========================================================
-// ЕДИНЫЙ GAMELOGIC.JS - ФИНАЛЬНАЯ, ЧИСТАЯ И ИСПРАВЛЕННАЯ ВЕРСИЯ
-// ==========================================================
+// НАЧАЛО ФАЙЛА game-logic.js (скопируйте всё отсюда)
 
 import { Chess } from 'chess.js';
 
 export class Game {
-    /**
-     * @param {string} gameId
-     * @param {object} player1 - { socket, user }
-     * @param {object} player2 - { socket, user }
-     * @param {Server} io - Экземпляр Socket.IO
-     * @param {function} onGameEnd - Колбэк для удаления игры из activeGames
-     * @param {function} updateStats - Колбэк для обновления статистики в БД
-     * @param {function} onRematchAccepted - Колбэк для создания новой игры-реванша
-     */
-    constructor(gameId, player1, player2, io, onGameEnd, updateStats, onRematchAccepted) {
+
+    constructor(gameId, player1, player2, io, onGameEnd, gameResultCallback, onRematchAccepted) {
         this.gameId = gameId;
         this.io = io;
-        this.onGameEnd = onGameEnd;
-        this.updateStats = updateStats;
-        this.onRematchAccepted = onRematchAccepted;
-
         this.chess = new Chess();
         this.isGameOver = false;
 
-        // Определяем, кто играет каким цветом
+        this.onGameEnd = onGameEnd;
+        this.gameResultCallback = gameResultCallback;
+        this.onRematchAccepted = onRematchAccepted;
+
         const isPlayer1White = Math.random() < 0.5;
         this.players = {
             white: isPlayer1White ? player1 : player2,
             black: isPlayer1White ? player2 : player1,
         };
 
-        // Хранилище для ID пользователей, запросивших реванш
         this.rematchRequests = new Set();
+        this.cleanupTimeout = null;
+
+        this.start();
     }
 
-    /**
-     * Начинает игру, рассылает начальное состояние.
-     */
     start() {
         console.log(`[Game ${this.gameId}] Начало игры. Белые: ${this.players.white.user.username}, Черные: ${this.players.black.user.username}`);
 
-        // Отправляем каждому игроку информацию о начале игры
+        this.players.white.socket.join(this.gameId);
+        this.players.black.socket.join(this.gameId);
+
         this.players.white.socket.emit('gameStart', {
             color: 'white',
             roomId: this.gameId,
             opponent: this.players.black.user,
         });
+
         this.players.black.socket.emit('gameStart', {
             color: 'black',
             roomId: this.gameId,
             opponent: this.players.white.user,
         });
 
-        this.emitGameState();
+        this.emitGameState('Игра началась!');
     }
 
-    /**
-     * Обрабатывает ход игрока.
-     * @param {string} socketId - ID сокета игрока, сделавшего ход.
-     * @param {object} move - Объект хода (например, { from: 'e2', to: 'e4' }).
-     */
     makeMove(socketId, move) {
-        if (this.isGameOver) return;
+        if (this.isGameOver) {
+            console.log(`[Game ${this.gameId}] Ход отклонен, игра уже окончена.`);
+            return;
+        }
 
         const playerColor = this.getPlayerColor(socketId);
-        if (playerColor !== this.chess.turn()) {
-            // Ход не в свою очередь, игнорируем или отправляем ошибку
-            console.log(`[Game ${this.gameId}] Попытка хода не в свою очередь от ${playerColor}`);
+        const currentTurn = this.chess.turn() === 'w' ? 'white' : 'black';
+
+        if (playerColor !== currentTurn) {
+            console.log(`[Game ${this.gameId}] Неверный ход от ${playerColor}. Сейчас ходят ${currentTurn}.`);
+            this.players[playerColor].socket.emit('invalidMove', { message: 'Сейчас не ваш ход' });
             return;
         }
 
@@ -75,22 +66,18 @@ export class Game {
             const result = this.chess.move(move);
             if (result === null) throw new Error('Недопустимый ход');
 
-            this.emitGameState();
+            this.emitGameState(`Ход: ${result.san}`);
             this.checkGameOver();
+
         } catch (error) {
-            console.error(`[Game ${this.gameId}] Ошибка хода:`, error.message);
-            // Можно отправить сообщение об ошибке конкретному игроку
-            this.io.to(socketId).emit('invalidMove', { message: 'Недопустимый ход' });
+            console.error(`[Game ${this.gameId}] Ошибка при выполнении хода: ${error.message}`);
+            this.players[playerColor].socket.emit('invalidMove', { message: 'Недопустимый ход' });
         }
     }
 
-    /**
-     * Обрабатывает сдачу игрока или его отключение.
-     * @param {string} socketId - ID сокета сдавшегося игрока.
-     */
-    handleResignation(socketId) {
-        if (this.isGameOver) return;
 
+ handleResignation(socketId) {
+        if (this.isGameOver) return;
         const resigningColor = this.getPlayerColor(socketId);
         if (!resigningColor) return;
 
@@ -98,44 +85,50 @@ export class Game {
         const winner = this.players[winnerColor];
         const loser = this.players[resigningColor];
 
-        const result = {
-            type: 'resign',
-            winner: winner.user.username,
-            loser: loser.user.username,
-        };
+        // --- ИСПРАВЛЕНИЕ 1 ---
+        // Использованы обратные кавычки (`) для шаблонной строки, а не одинарные (')
+        const result = { type: 'resign', winner: winner.user.username, reason: `${loser.user.username} сдался.` };
 
+        // Передаем объект result в endGame
         this.endGame(result, winner.user.id, loser.user.id, false);
     }
 
-    /**
-     * Обрабатывает запрос на реванш от игрока.
-     * @param {string} socketId - ID сокета игрока.
-     */
     requestRematch(socketId) {
+        // --- ИСПРАВЛЕНИЕ 2 ---
+        // Реванш можно предложить ТОЛЬКО ПОСЛЕ окончания игры
         if (!this.isGameOver) return;
 
-        const player = this.getPlayerColor(socketId) === 'white' ? this.players.white : this.players.black;
-        const opponent = this.getPlayerColor(socketId) === 'white' ? this.players.black : this.players.white;
+        const playerColor = this.getPlayerColor(socketId);
+        if (!playerColor) return;
 
-        if (this.rematchRequests.has(player.user.id)) return; // Уже запросил
+        const player = this.players[playerColor];
+        const opponent = this.players[playerColor === 'white' ? 'black' : 'white'];
+
+        if (this.rematchRequests.has(player.user.id)) return;
 
         this.rematchRequests.add(player.user.id);
         console.log(`[Game ${this.gameId}] ${player.user.username} предлагает реванш.`);
 
         if (this.rematchRequests.has(opponent.user.id)) {
-            // Оба согласились!
-            console.log(`[Game ${this.gameId}] Оба игрока согласились на реванш. Создание новой игры.`);
-            this.onRematchAccepted(this.players.white, this.players.black);
-            this.cleanup(); // Уничтожаем старую игру
+            console.log(`[Game ${this.gameId}] Оба игрока согласились. Создание новой игры.`);
+
+            // --- ИСПРАВЛЕНИЕ 3 ---
+            // Немедленно останавливаем таймер удаления старой игры
+            clearTimeout(this.cleanupTimeout);
+
+            if (this.onRematchAccepted) {
+                // Передаем игроков в обратном порядке для смены цвета
+                this.onRematchAccepted(this.players.black, this.players.white);
+            }
+
+            // Немедленно удаляем старую игру
+            this.cleanup();
         } else {
-            // Уведомляем оппонента о предложении
-            opponent.socket.emit('rematchOffered');
+            // Отправляем предложение второму игроку
+            opponent.socket.emit('rematchOffered', { from: player.user.username });
         }
     }
 
-    /**
-     * Проверяет, не закончилась ли игра (мат, пат, ничья).
-     */
     checkGameOver() {
         if (!this.chess.isGameOver()) return;
 
@@ -143,25 +136,23 @@ export class Game {
 
         if (this.chess.isCheckmate()) {
             const winnerColor = this.chess.turn() === 'w' ? 'black' : 'white';
-            const loserColor = this.chess.turn() === 'w' ? 'white' : 'black';
+            const loserColor = winnerColor === 'white' ? 'black' : 'white';
             winnerId = this.players[winnerColor].user.id;
             loserId = this.players[loserColor].user.id;
-            result = { type: 'checkmate', winner: this.players[winnerColor].user.username };
+            result = { type: 'checkmate', winner: this.players[winnerColor].user.username, reason: 'Мат!' };
         } else {
             isDraw = true;
-            if (this.chess.isStalemate()) result = { type: 'stalemate' };
-            else if (this.chess.isDraw()) result = { type: 'draw' };
-            else result = { type: 'draw', reason: 'threefold repetition' };
-        }
+            winnerId = this.players.white.user.id;
+            loserId = this.players.black.user.id;
 
-        if (result) {
-            this.endGame(result, winnerId, loserId, isDraw);
+            if (this.chess.isStalemate()) result = { type: 'stalemate', reason: 'Пат' };
+            else if (this.chess.isThreefoldRepetition()) result = { type: 'draw', reason: 'Ничья (троекратное повторение)' };
+            else if (this.chess.isInsufficientMaterial()) result = { type: 'draw', reason: 'Ничья (недостаточно материала)' };
+            else result = { type: 'draw', reason: 'Ничья по правилам 50 ходов' };
         }
+        this.endGame(result, winnerId, loserId, isDraw);
     }
 
-    /**
-     * Завершает игру, обновляет статистику и дает время на реванш.
-     */
     endGame(result, winnerId, loserId, isDraw) {
         if (this.isGameOver) return;
         this.isGameOver = true;
@@ -169,47 +160,54 @@ export class Game {
         console.log(`[Game ${this.gameId}] Завершена. Результат:`, result);
         this.io.to(this.gameId).emit('gameOver', result);
 
-        if (this.updateStats) {
-            this.updateStats(winnerId, loserId, isDraw);
+        if (this.gameResultCallback) {
+            this.gameResultCallback(winnerId, loserId, isDraw);
         }
 
-        // ДАЕМ ИГРОКАМ 60 СЕКУНД НА РЕВАНШ, ПРЕЖДЕ ЧЕМ УНИЧТОЖИТЬ ИГРУ
-        setTimeout(() => {
-            if (this.rematchRequests.size < 2) {
-                console.log(`[Game ${this.gameId}] Время на реванш истекло, игра удаляется.`);
-                this.io.to(this.gameId).emit('rematchCancelled'); // Уведомляем клиентов, что реванш отменен
-                this.cleanup();
-            }
-        }, 60000); // 60 секунд
+        console.log(`[Game ${this.gameId}] Игра будет удалена из памяти через 20 секунд.`);
+        this.cleanupTimeout = setTimeout(() => this.cleanup(), 20000);
     }
 
-    /**
-     * "Чистит" игру: отписывается от событий и вызывает колбэк onGameEnd.
-     */
     cleanup() {
-        // Убираем слушатели, чтобы избежать утечек памяти и дублирования событий
-        this.players.white.socket.removeAllListeners('makeMove');
-        this.players.white.socket.removeAllListeners('resign');
-        this.players.white.socket.removeAllListeners('requestRematch');
+        console.log(`[Game ${this.gameId}] Очистка и удаление.`);
+        clearTimeout(this.cleanupTimeout);
 
-        this.players.black.socket.removeAllListeners('makeMove');
-        this.players.black.socket.removeAllListeners('resign');
-        this.players.black.socket.removeAllListeners('requestRematch');
+        // Отписываем игроков от комнаты
+        if (this.players.white && this.players.white.socket) {
+            this.players.white.socket.leave(this.gameId);
+        }
+        if (this.players.black && this.players.black.socket) {
+            this.players.black.socket.leave(this.gameId);
+        }
 
         if (this.onGameEnd) {
             this.onGameEnd(this.gameId);
         }
     }
 
-    // --- Вспомогательные функции ---
-
     getPlayerColor(socketId) {
-        if (this.players.white.socket.id === socketId) return 'white';
-        if (this.players.black.socket.id === socketId) return 'black';
+        if (this.players.white && this.players.white.socket.id === socketId) return 'white';
+        if (this.players.black && this.players.black.socket.id === socketId) return 'black';
         return null;
     }
 
-    emitGameState() {
-        this.io.to(this.gameId).emit('updateState', { fen: this.chess.fen() });
+    emitGameState(message = '') {
+        const gameState = {
+            fen: this.chess.fen(),
+            turn: this.chess.turn(),
+            history: this.chess.history({ verbose: true }),
+            isCheck: this.chess.inCheck(),
+            isGameOver: this.isGameOver,
+            message: message,
+        };
+
+        // Строки для отладки
+        console.log(`[Game ${this.gameId}] ОТПРАВКА gameStateUpdate в комнату ${this.gameId}`);
+        console.log(`[Game ${this.gameId}] FEN для отправки: ${gameState.fen}`);
+
+        // Отправка обновления состояния всем в комнате
+        this.io.to(this.gameId).emit('gameStateUpdate', gameState);
     }
-}
+};
+
+// КОНЕЦ ФАЙЛА game-logic.js (копируйте всё досюда)
